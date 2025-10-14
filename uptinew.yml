@@ -23,11 +23,11 @@
       run_once: true
       
     - name: Crear Registro en la DB MySQL
-      delegate_to: "{{ controllerserver }}"
       community.mysql.mysql_query:
-        login_host: "{{ mysql_host }}"
-        login_user: "{{ mysql_user }}"
+        login_host: 10.110.0.116
+        login_user: root
         login_password: "{{ mysql_password }}"
+        login_port: 3200
         login_db: "{{ mysql_db }}"
         query: |
           INSERT INTO `registro` (`fecha`, `hostname`) VALUES ('{{ current_time }}', '{{ inventory_hostname }}');
