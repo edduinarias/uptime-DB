@@ -19,7 +19,7 @@
     - name: Definir fecha y hora actual en formato MySQL
       set_fact:
         current_time: "{{ lookup('pipe', 'date +\"%Y-%m-%d %H:%M:%S\"') }}"
-      delegate_to: bastion.local.com
+      delegate_to: LNXADMUX01
       run_once: true
       
     - name: Crear Registro en la DB MySQL
