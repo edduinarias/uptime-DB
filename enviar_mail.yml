@@ -3,10 +3,14 @@
   hosts: localhost
   gather_facts: no
   vars:
-    uptime_url: "http://192.168.1.129:8080/infoprepost/uptime.php"
+    uptime_url: "http://10.110.0.116/infoprepost/uptime.php"
     output_file: "/tmp/uptime_status.html"
-    recipient_email: "destinatario@ejemplo.com"
     subject: "Reporte de Uptime"
+    email_host: "172.22.88.6"
+    email_port: 25
+    email_from: "edduin.arias.Ext@claro.com.co"
+    email_to: "edduin.arias.Ext@claro.com.co"
+    email_cc: "gdi_admunix@claro.com.co"
 
   tasks:
     - name: Obtener contenido desde la URL
@@ -21,9 +25,16 @@
         content: "{{ web_response.content }}"
         dest: "{{ output_file }}"
 
-    - name: Enviar el contenido por correo
-      shell: |
-        cat "{{ output_file }}" | mailx -a "Content-Type: text/html" -s "{{ subject }}" "{{ recipient_email }}"
-      args:
-        executable: /bin/bash
-
+    - name: Enviar correo con el reporte de uptime (HTML)
+      mail:
+        host: "{{ email_host }}"
+        port: "{{ email_port }}"
+        subject: "{{ subject }}"
+        subtype: html
+        body: "{{ lookup('file', output_file) }}"
+        from: "{{ email_from }}"
+        to: "{{ email_to }}"
+      delegate_to: lnxadmux01
+      run_once: yes
+      tags:
+        - envio_uptime
