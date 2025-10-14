@@ -39,7 +39,7 @@ aix_files:
    - "/etc/*"
    - "/var/spool/cron/*"
 
-mysql_host: "localhost"
+mysql_host: "10.110.0.116"
 mysql_user: "root"
 mysql_password: "Winner2020"
 mysql_db: "uptime"
