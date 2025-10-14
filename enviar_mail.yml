@@ -1,0 +1,29 @@
+---
+- name: Consultar uptime y enviar por correo
+  hosts: localhost
+  gather_facts: no
+  vars:
+    uptime_url: "http://192.168.1.129:8080/infoprepost/uptime.php"
+    output_file: "/tmp/uptime_status.html"
+    recipient_email: "destinatario@ejemplo.com"
+    subject: "Reporte de Uptime"
+
+  tasks:
+    - name: Obtener contenido desde la URL
+      uri:
+        url: "{{ uptime_url }}"
+        method: GET
+        return_content: yes
+      register: web_response
+
+    - name: Guardar contenido HTML en archivo temporal
+      copy:
+        content: "{{ web_response.content }}"
+        dest: "{{ output_file }}"
+
+    - name: Enviar el contenido por correo
+      shell: |
+        cat "{{ output_file }}" | mailx -a "Content-Type: text/html" -s "{{ subject }}" "{{ recipient_email }}"
+      args:
+        executable: /bin/bash
+
