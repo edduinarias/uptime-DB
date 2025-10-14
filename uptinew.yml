@@ -1,19 +1,14 @@
 ---
-- name: Registrar uptime de sistemas Linux, HPUX, AIX y Solaris
+- name: Registrar uptime de sistemas Linux, HPUX y Solaris
   hosts: all
   gather_facts: false
   become: false
   vars:
-    uptime_dir: "./uptimes"
-    uptime_dir2: "./uptimes2"
-    ansible_ssh_timeout: 4    
-    mysql_host: "localhost"
+    mysql_host: "10.110.0.116"
     mysql_user: "root"
     mysql_password: "Winner2020"
     mysql_db: "uptime"
-    tabla: "registro"
-    grupoadmin: "admtmx"
-#    controllerserver: "bastion.local.com"    
+    mysql_port: 3200
 
   tasks:
     - name: Definir fecha y hora actual en formato MySQL
@@ -21,41 +16,137 @@
         current_time: "{{ lookup('pipe', 'date +\"%Y-%m-%d %H:%M:%S\"') }}"
       delegate_to: LNXADMUX01
       run_once: true
-      
-    - name: Crear Registro en la DB MySQL
+
+    - name: Crear Registro inicial en la DB MySQL
+      delegate_to: LNXADMUX01
       community.mysql.mysql_query:
-        login_host: 10.110.0.116
-        login_user: root
+        login_host: "{{ mysql_host }}"
+        login_user: "{{ mysql_user }}"
         login_password: "{{ mysql_password }}"
-        login_port: 3200
+        login_port: "{{ mysql_port }}"
         login_db: "{{ mysql_db }}"
         query: |
           INSERT INTO `registro` (`fecha`, `hostname`) VALUES ('{{ current_time }}', '{{ inventory_hostname }}');
-      when: inventory_hostname != controllerserver  
 
-    - name: Obtener uptime en Linux
+    - name: Recolectar solo ansible_system
+      setup:
+        filter: ansible_system
+
+    - name: Obtener uptime en minutos - Linux
+      when: ansible_system == "Linux"
       shell: /usr/bin/awk '{print int($1 / 60)}' /proc/uptime
       register: result_linux
       ignore_errors: yes
 
+    - name: Obtener uptime en minutos - HP-UX
+      when: ansible_system == "HP-UX"
+      shell: |
+        uptime | awk '{
+          for(i=1;i<=NF;i++){
+            if($i=="up"){
+              if($(i+2)=="days," || $(i+2)=="day,"){
+                days=$(i+1);
+                split($(i+3), t, ":");
+                hours=t[1]; mins=t[2];
+              } else {
+                days=0;
+                split($(i+1), t, ":");
+                hours=t[1]; mins=t[2];
+              }
+              total = (days * 1440) + (hours * 60) + mins;
+              print total;
+              exit;
+            }
+          }
+        }'
+      register: result_hpux
+      ignore_errors: yes
+
+    - name: Obtener uptime en minutos - SunOS (Solaris)
+      when: ansible_system == "SunOS"
+      shell: |
+        LANG=C LC_ALL=C /usr/bin/uptime | /usr/xpg4/bin/awk '{
+          for(i=1;i<=NF;i++){
+            if($i=="up"){
+              # Ejemplo: "up  45 day(s),  4:02"
+              if($(i+2) ~ /day/){
+                gsub("[^0-9]", "", $(i+1));
+                days=$(i+1);
+                split($(i+3), t, ":");
+                hours=t[1]; mins=t[2];
+              } else {
+                days=0;
+                split($(i+1), t, ":");
+                hours=t[1]; mins=t[2];
+              }
+              total = (days * 1440) + (hours * 60) + mins;
+              print total;
+              exit;
+            }
+          }
+        }'
+      register: result_sunos
+      ignore_errors: yes
+
+
+    - name: Obtener uptime en minutos - AIX
+      when: ansible_system == "AIX"
+      shell: |
+        /usr/bin/uptime | /usr/bin/awk '{
+          for(i=1;i<=NF;i++){
+            if($i=="up"){
+              # Ejemplo: "up 34 days, 5:15"  o  "up 3:15"
+              if($(i+2)=="days," || $(i+2)=="day,"){
+                days=$(i+1);
+                split($(i+3), t, ":");
+                hours=t[1]; mins=t[2];
+              } else {
+                days=0;
+                split($(i+1), t, ":");
+                hours=t[1]; mins=t[2];
+              }
+              total = (days * 1440) + (hours * 60) + mins;
+              print total;
+              exit;
+            }
+          }
+        }'
+      register: result_aix
+      ignore_errors: yes
+
+
+      
+    - name: Definir variable final de uptime
+      set_fact:
+        uptime_minutes: >-
+          {% if ansible_system == 'Linux' %}
+            {{ result_linux.stdout | default('No disponible') }}
+          {% elif ansible_system == 'HP-UX' %}
+            {{ result_hpux.stdout | default('No disponible') }}
+          {% elif ansible_system == 'SunOS' %}
+            {{ result_sunos.stdout | default('No disponible') }}
+          {% elif ansible_system == 'AIX' %}
+            {{ result_aix.stdout | default('No disponible') }}
+          {% else %}
+            No disponible
+          {% endif %}
+
 
     - name: Mostrar resultado de uptime
       debug:
-        msg: "Uptime de {{ inventory_hostname }}: {{ result_linux.stdout_lines }}"
-      when: result_linux is defined
-
+        msg: "Uptime de {{ inventory_hostname }} ({{ ansible_system }}): {{ uptime_minutes }} minutos"
 
     - name: Actualizar información general en MySQL
+      delegate_to: LNXADMUX01
       community.mysql.mysql_query:
-        login_host: 10.110.0.116
-        login_user: root
+        login_host: "{{ mysql_host }}"
+        login_user: "{{ mysql_user }}"
         login_password: "{{ mysql_password }}"
-        login_port: 3200
+        login_port: "{{ mysql_port }}"
         login_db: "{{ mysql_db }}"
         query: |
           UPDATE registro
           SET
-            `uptime` = '{{ result_linux.stdout_lines[0] }}'
+            `uptime` = '{{ uptime_minutes }}'
           WHERE `fecha` = '{{ current_time }}'
             AND `hostname` = '{{ inventory_hostname }}';
-      when: inventory_hostname != controllerserver
