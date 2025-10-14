@@ -13,7 +13,7 @@
     mysql_db: "uptime"
     tabla: "registro"
     grupoadmin: "admtmx"
-    controllerserver: "bastion.local.com"    
+#    controllerserver: "bastion.local.com"    
 
   tasks:
     - name: Definir fecha y hora actual en formato MySQL
@@ -23,7 +23,7 @@
       run_once: true
       
     - name: Crear Registro en la DB MySQL
-      delegate_to: bastion.local.com
+      delegate_to: "{{ controllerserver }}"
       community.mysql.mysql_query:
         login_host: "{{ mysql_host }}"
         login_user: "{{ mysql_user }}"
@@ -46,7 +46,7 @@
 
 
     - name: Actualizar información general en MySQL
-      delegate_to: bastion.local.com
+      delegate_to: "{{ controllerserver }}"
       community.mysql.mysql_query:
         login_host: "{{ mysql_host }}"
         login_user: "{{ mysql_user }}"
